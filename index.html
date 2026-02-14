@@ -1,0 +1,1122 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Counter-Strike: Browser Mission</title>
+    <style>
+        :root {
+            --cs-yellow: #de9b35;
+            --cs-blue: #5d79ae;
+            --cs-red: #b74c4c;
+            --cs-bg: #1b1b1b;
+            --cs-hud: rgba(0, 0, 0, 0.7);
+            --font-main: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            touch-action: none; /* Zapobiega zoomowaniu na mobile */
+            user-select: none;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--cs-bg);
+            font-family: var(--font-main);
+            overflow: hidden;
+            color: white;
+        }
+
+        /* Kontener gry */
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #e6c288; /* Kolor piasku a la Dust 2 */
+            background-image: 
+                radial-gradient(#d6b278 15%, transparent 16%),
+                radial-gradient(#d6b278 15%, transparent 16%);
+            background-size: 60px 60px;
+            background-position: 0 0, 30px 30px;
+        }
+
+        canvas {
+            display: block;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* UI Overlay (HUD) */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; /* Klikania przechodzą do canvas */
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        /* Górny pasek */
+        .hud-top {
+            display: flex;
+            justify-content: center;
+            padding: 10px;
+            text-shadow: 1px 1px 2px black;
+        }
+
+        .timer {
+            font-size: 24px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .score-board {
+            position: absolute;
+            left: 20px;
+            font-size: 18px;
+            color: var(--cs-yellow);
+        }
+
+        /* Dolny pasek (Health, Ammo) */
+        .hud-bottom {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+            padding: 20px;
+            padding-bottom: 40px;
+        }
+
+        .hud-panel {
+            background: var(--cs-hud);
+            padding: 10px 20px;
+            border-radius: 4px;
+            border: 1px solid rgba(255,255,255,0.2);
+            min-width: 120px;
+        }
+
+        .health-display {
+            color: white;
+        }
+        .health-bar-container {
+            width: 100%;
+            height: 10px;
+            background: #333;
+            margin-top: 5px;
+        }
+        .health-bar {
+            width: 100%;
+            height: 100%;
+            background: var(--cs-blue);
+            transition: width 0.2s, background 0.2s;
+        }
+
+        .ammo-display {
+            text-align: right;
+        }
+        .ammo-current {
+            font-size: 32px;
+            font-weight: bold;
+            color: var(--cs-yellow);
+        }
+        .ammo-reserve {
+            font-size: 18px;
+            color: #ccc;
+        }
+
+        /* Ekrany menu */
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            pointer-events: auto;
+            z-index: 100;
+            backdrop-filter: blur(5px);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            font-size: 3rem;
+            color: var(--cs-yellow);
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px var(--cs-yellow);
+            text-align: center;
+        }
+
+        h2 {
+            font-size: 2rem;
+            color: white;
+            margin-bottom: 20px;
+        }
+
+        .btn {
+            background: var(--cs-blue);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: transform 0.1s, background 0.2s;
+            border-radius: 2px;
+            margin: 10px;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            background: #4a6291;
+            transform: scale(1.05);
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .author-info {
+            margin-top: 30px;
+            color: #888;
+            font-size: 0.9rem;
+            text-align: center;
+        }
+
+        .author-info a {
+            color: var(--cs-yellow);
+            text-decoration: none;
+        }
+
+        .controls-hint {
+            margin-top: 20px;
+            color: #aaa;
+            font-size: 0.9rem;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        .mobile-controls {
+            display: none; /* Domyślnie ukryte, pokazujemy JS na mobile */
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            height: 150px;
+            pointer-events: none;
+            z-index: 50;
+            padding: 0 20px;
+        }
+
+        .joystick-area {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            pointer-events: auto;
+            touch-action: none;
+        }
+
+        .joystick-knob {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .fire-btn {
+            position: absolute;
+            bottom: 30px;
+            right: 30px;
+            width: 80px;
+            height: 80px;
+            background: rgba(183, 76, 76, 0.6);
+            border: 2px solid rgba(255,255,255,0.5);
+            border-radius: 50%;
+            pointer-events: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-weight: bold;
+            font-size: 14px;
+            touch-action: none;
+        }
+        
+        .reload-btn {
+            position: absolute;
+            bottom: 120px;
+            right: 30px;
+            width: 50px;
+            height: 50px;
+            background: rgba(222, 155, 53, 0.6);
+            border-radius: 50%;
+            pointer-events: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 10px;
+            touch-action: none;
+        }
+
+        /* Responsywność */
+        @media (max-width: 768px) {
+            h1 { font-size: 2rem; }
+            .mobile-controls { display: block; }
+            .controls-hint { display: none; }
+        }
+
+        /* Animacja obrażeń */
+        @keyframes damage-flash {
+            0% { box-shadow: inset 0 0 0 0 rgba(255,0,0,0); }
+            50% { box-shadow: inset 0 0 50px 20px rgba(255,0,0,0.5); }
+            100% { box-shadow: inset 0 0 0 0 rgba(255,0,0,0); }
+        }
+        .damage-effect {
+            animation: damage-flash 0.2s ease-out;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <!-- Płótno gry -->
+        <canvas id="gameCanvas"></canvas>
+
+        <!-- Warstwa HUD -->
+        <div id="ui-layer">
+            <div class="hud-top">
+                <div class="score-board">CT: <span id="score">0</span> | TR: <span id="enemy-score">0</span></div>
+                <div class="timer" id="timer">02:00</div>
+            </div>
+            
+            <div class="mobile-controls">
+                <div class="joystick-area" id="joystick">
+                    <div class="joystick-knob" id="joystick-knob"></div>
+                </div>
+                <div class="fire-btn" id="fire-btn">FIRE</div>
+                <div class="reload-btn" id="reload-btn">R</div>
+            </div>
+
+            <div class="hud-bottom">
+                <div class="hud-panel health-display">
+                    <div><span id="health-text">100</span> HP</div>
+                    <div class="health-bar-container">
+                        <div class="health-bar" id="health-bar"></div>
+                    </div>
+                </div>
+                <div class="hud-panel ammo-display">
+                    <div class="ammo-current"><span id="ammo">30</span></div>
+                    <div class="ammo-reserve">/ 90</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Menu Główne -->
+        <div id="start-screen" class="screen">
+            <h1>Counter-Strike<br><span style="font-size:0.5em; color:white;">Browser Mission</span></h1>
+            <button class="btn" id="start-btn">Rozpocznij Misję</button>
+            
+            <div class="controls-hint">
+                <p><strong>PC:</strong> WASD - Ruch | Myszka - Celowanie | LPM - Strzał | R - Przeładowanie</p>
+                <p><strong>Mobile:</strong> Lewy Joystick - Ruch | Przycisk FIRE - Strzał</p>
+            </div>
+
+            <div class="author-info">
+                Autor: <a href="https://linktr.ee/kitadamian" target="_blank">Damian Kita</a>
+            </div>
+        </div>
+
+        <!-- Ekran Koniec Gry -->
+        <div id="game-over-screen" class="screen hidden">
+            <h2 id="end-title">Koniec Gry</h2>
+            <p style="font-size: 1.5rem; margin-bottom: 20px;">Wynik: <span id="final-score" style="color:var(--cs-yellow)">0</span></p>
+            <button class="btn" id="restart-btn">Zagraj Ponownie</button>
+            <div class="author-info">
+                Autor: <a href="https://linktr.ee/kitadamian" target="_blank">Damian Kita</a>
+            </div>
+        </div>
+    </div>
+
+<script>
+/**
+ * LOGIKA GRY
+ * Autor: Damian Kita (na podstawie prośby użytkownika)
+ */
+
+// --- System Dźwiękowy (AudioContext) ---
+const AudioSys = {
+    ctx: null,
+    musicOscs: [],
+    
+    init() {
+        if (!this.ctx) {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+
+    // Generowanie dźwięku strzału (Noise + Oscillator)
+    playShoot() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        
+        // Szum (eksplozja prochu)
+        const bufferSize = this.ctx.sampleRate * 0.1; // 100ms
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const noiseFilter = this.ctx.createBiquadFilter();
+        noiseFilter.type = 'lowpass';
+        noiseFilter.frequency.value = 1000;
+        const noiseGain = this.ctx.createGain();
+        noiseGain.gain.setValueAtTime(0.5, t);
+        noiseGain.gain.exponentialRampToValueAtTime(0.01, t + 0.1);
+        
+        noise.connect(noiseFilter);
+        noiseFilter.connect(noiseGain);
+        noiseGain.connect(this.ctx.destination);
+        noise.start();
+
+        // Ton (wystrzał)
+        const osc = this.ctx.createOscillator();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.exponentialRampToValueAtTime(0.01, t + 0.15);
+        const oscGain = this.ctx.createGain();
+        oscGain.gain.setValueAtTime(0.3, t);
+        oscGain.gain.exponentialRampToValueAtTime(0.01, t + 0.15);
+        
+        osc.connect(oscGain);
+        oscGain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(t + 0.2);
+    },
+
+    playReload() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.frequency.setValueAtTime(800, t);
+        osc.frequency.linearRampToValueAtTime(1200, t + 0.1);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.2);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(t + 0.2);
+    },
+
+    playHit() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.1);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(t + 0.1);
+    },
+
+    playEmptyClip() {
+        if (!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        osc.frequency.setValueAtTime(600, t);
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.exponentialRampToValueAtTime(0.01, t + 0.05);
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(t + 0.05);
+    },
+
+    startMusic() {
+        if (!this.ctx) return;
+        // Prosta, mroczna pętla basowa na wzór soundtracku CS
+        const createNote = (freq, time, dur) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.value = freq;
+            osc.type = 'triangle';
+            gain.gain.setValueAtTime(0.05, time);
+            gain.gain.linearRampToValueAtTime(0, time + dur);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(time);
+            osc.stop(time + dur);
+        };
+
+        // Prosty sekwencer
+        let note = 0;
+        const loop = () => {
+            if(!game.isPlaying) return;
+            const t = this.ctx.currentTime;
+            createNote(110, t, 0.5); // A2
+            createNote(110, t + 0.5, 0.5);
+            createNote(130.81, t + 1.0, 0.5); // C3
+            createNote(146.83, t + 1.5, 0.5); // D3
+            
+            this.musicTimer = setTimeout(loop, 2000);
+        };
+        loop();
+    },
+
+    stopMusic() {
+        if(this.musicTimer) clearTimeout(this.musicTimer);
+    }
+};
+
+// --- Silnik Gry ---
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const ui = {
+    start: document.getElementById('start-screen'),
+    gameOver: document.getElementById('game-over-screen'),
+    score: document.getElementById('score'),
+    enemyScore: document.getElementById('enemy-score'),
+    timer: document.getElementById('timer'),
+    ammo: document.getElementById('ammo'),
+    healthText: document.getElementById('health-text'),
+    healthBar: document.getElementById('health-bar'),
+    container: document.getElementById('game-container'),
+    finalScore: document.getElementById('final-score'),
+    endTitle: document.getElementById('end-title')
+};
+
+// Stan gry
+let game = {
+    width: 0,
+    height: 0,
+    lastTime: 0,
+    isPlaying: false,
+    score: 0,
+    enemyScore: 0,
+    timeLeft: 120, // sekundy
+    camera: { x: 0, y: 0 }
+};
+
+// Gracz
+const player = {
+    x: 0, y: 0,
+    radius: 15,
+    speed: 200,
+    angle: 0,
+    hp: 100,
+    maxHp: 100,
+    ammo: 30,
+    maxAmmo: 30,
+    reloading: false,
+    reloadTime: 1.5, // s
+    lastShot: 0,
+    fireRate: 0.1, // s
+    color: '#5d79ae' // CT Blue
+};
+
+// Tablice obiektów
+let bullets = [];
+let enemies = [];
+let particles = [];
+let obstacles = []; // Skrzynie
+
+// Sterowanie
+const input = {
+    keys: {},
+    mouse: { x: 0, y: 0, down: false },
+    joystick: { active: false, x: 0, y: 0, angle: 0, force: 0 },
+    mobileFire: false
+};
+
+// --- Inicjalizacja ---
+
+function resize() {
+    game.width = window.innerWidth;
+    game.height = window.innerHeight;
+    canvas.width = game.width;
+    canvas.height = game.height;
+}
+window.addEventListener('resize', resize);
+resize();
+
+// Mapa (Dust 2 vibe - proste prostokąty jako skrzynie)
+function initMap() {
+    obstacles = [
+        { x: 200, y: 200, w: 100, h: 40 }, // Skrzynia 1
+        { x: 600, y: 150, w: 40, h: 100 }, // Skrzynia 2
+        { x: 300, y: 500, w: 80, h: 80 },  // Duża skrzynia
+        { x: 700, y: 600, w: 150, h: 50 },
+        { x: 100, y: 700, w: 50, h: 150 }
+    ];
+    // Gracz startuje pośrodku
+    player.x = game.width / 2;
+    player.y = game.height / 2;
+    player.hp = 100;
+    player.ammo = 30;
+    player.reloading = false;
+    
+    bullets = [];
+    enemies = [];
+    particles = [];
+}
+
+function spawnEnemy() {
+    if (!game.isPlaying) return;
+    
+    // Pozycja spawnu (losowa krawędź)
+    let ex, ey;
+    const side = Math.floor(Math.random() * 4);
+    const margin = 50;
+    
+    if (side === 0) { ex = Math.random() * game.width; ey = -margin; } // Góra
+    else if (side === 1) { ex = game.width + margin; ey = Math.random() * game.height; } // Prawo
+    else if (side === 2) { ex = Math.random() * game.width; ey = game.height + margin; } // Dół
+    else { ex = -margin; ey = Math.random() * game.height; } // Lewo
+
+    enemies.push({
+        x: ex,
+        y: ey,
+        radius: 15,
+        speed: 80 + Math.random() * 40,
+        hp: 30 + (game.score * 2), // Trudniejszy wraz z czasem
+        maxHp: 30 + (game.score * 2),
+        lastShot: 0,
+        fireRate: 1.5 + Math.random(),
+        color: '#b74c4c', // T Red
+        state: 'move' // move, attack
+    });
+
+    // Następny wróg
+    const nextSpawn = Math.max(500, 3000 - (game.score * 50));
+    setTimeout(spawnEnemy, nextSpawn);
+}
+
+// --- Pętla Gry ---
+
+function update(dt) {
+    if (!game.isPlaying) return;
+
+    // Timer rundy
+    game.timeLeft -= dt;
+    if (game.timeLeft <= 0) {
+        endGame(true);
+        return;
+    }
+
+    // Ruch gracza (Klawiatura)
+    let dx = 0;
+    let dy = 0;
+    if (input.keys['w'] || input.keys['ArrowUp']) dy = -1;
+    if (input.keys['s'] || input.keys['ArrowDown']) dy = 1;
+    if (input.keys['a'] || input.keys['ArrowLeft']) dx = -1;
+    if (input.keys['d'] || input.keys['ArrowRight']) dx = 1;
+
+    // Ruch gracza (Joystick)
+    if (input.joystick.active) {
+        dx = input.joystick.x;
+        dy = input.joystick.y;
+    }
+
+    // Normalizacja wektora ruchu
+    if (dx !== 0 || dy !== 0) {
+        const len = Math.sqrt(dx*dx + dy*dy);
+        // Jeśli len > 1 to joystick jest wychylony maksymalnie, jeśli < 1 to delikatnie
+        const scale = (len > 1) ? 1/len : 1; 
+        dx *= scale;
+        dy *= scale;
+
+        const nextX = player.x + dx * player.speed * dt;
+        const nextY = player.y + dy * player.speed * dt;
+
+        // Kolizje ze ścianami mapy
+        if (nextX > 0 && nextX < game.width) player.x = nextX;
+        if (nextY > 0 && nextY < game.height) player.y = nextY;
+
+        // Kolizje ze skrzyniami
+        for (let obs of obstacles) {
+            if (player.x + player.radius > obs.x && player.x - player.radius < obs.x + obs.w &&
+                player.y + player.radius > obs.y && player.y - player.radius < obs.y + obs.h) {
+                // Proste cofnięcie (brak pełnego slidingu dla uproszczenia)
+                player.x -= dx * player.speed * dt;
+                player.y -= dy * player.speed * dt;
+            }
+        }
+    }
+
+    // Celowanie
+    let targetX, targetY;
+    if (input.joystick.active) {
+        // Na joysticku celujemy w tym samym kierunku co ruch? 
+        // Lepiej: strzelamy tam gdzie patrzy gracz, a ostatni kierunek ruchu ustala kąt
+        if (Math.abs(dx) > 0.1 || Math.abs(dy) > 0.1) {
+            player.angle = Math.atan2(dy, dx);
+        }
+    } else {
+        // Mysz
+        player.angle = Math.atan2(input.mouse.y - player.y, input.mouse.x - player.x);
+    }
+
+    // Strzelanie
+    const now = game.lastTime / 1000;
+    if ((input.mouse.down || input.mobileFire) && !player.reloading && now - player.lastShot > player.fireRate) {
+        if (player.ammo > 0) {
+            shoot();
+        } else {
+            if (now - player.lastShot > player.fireRate * 2) {
+                AudioSys.playEmptyClip();
+                player.lastShot = now;
+            }
+        }
+    }
+
+    // Przeładowanie
+    if (player.reloading) {
+        if (now - player.reloadStart > player.reloadTime) {
+            player.ammo = player.maxAmmo;
+            player.reloading = false;
+            updateHUD();
+        }
+    }
+
+    // Aktualizacja pocisków
+    for (let i = bullets.length - 1; i >= 0; i--) {
+        let b = bullets[i];
+        b.x += Math.cos(b.angle) * b.speed * dt;
+        b.y += Math.sin(b.angle) * b.speed * dt;
+        b.life -= dt;
+
+        // Kolizja ze skrzyniami
+        let hitObstacle = false;
+        for (let obs of obstacles) {
+            if (b.x > obs.x && b.x < obs.x + obs.w && b.y > obs.y && b.y < obs.y + obs.h) {
+                hitObstacle = true;
+                createParticles(b.x, b.y, '#aaa', 3);
+                break;
+            }
+        }
+
+        if (b.life <= 0 || hitObstacle || b.x < 0 || b.x > game.width || b.y < 0 || b.y > game.height) {
+            bullets.splice(i, 1);
+            continue;
+        }
+
+        // Kolizja z wrogami (Pocisk gracza)
+        if (!b.isEnemy) {
+            for (let j = enemies.length - 1; j >= 0; j--) {
+                let e = enemies[j];
+                let dist = Math.hypot(b.x - e.x, b.y - e.y);
+                if (dist < e.radius + 5) {
+                    e.hp -= b.damage;
+                    createParticles(b.x, b.y, '#b74c4c', 5); // Krew
+                    bullets.splice(i, 1);
+                    
+                    if (e.hp <= 0) {
+                        enemies.splice(j, 1);
+                        game.score++;
+                        AudioSys.playHit(); // Dźwięk zabicia
+                        updateHUD();
+                    } else {
+                        // Dźwięk trafienia
+                        // AudioSys.playHit(); 
+                    }
+                    break;
+                }
+            }
+        } 
+        // Kolizja z graczem (Pocisk wroga)
+        else {
+            let dist = Math.hypot(b.x - player.x, b.y - player.y);
+            if (dist < player.radius + 5) {
+                takeDamage(b.damage);
+                bullets.splice(i, 1);
+            }
+        }
+    }
+
+    // Aktualizacja wrogów
+    for (let e of enemies) {
+        const distToPlayer = Math.hypot(player.x - e.x, player.y - e.y);
+        
+        // AI Ruch
+        if (distToPlayer > 300) {
+            e.x += Math.cos(player.angle + Math.PI) * e.speed * dt; // Podążaj za graczem (w przybliżeniu)
+            e.y += Math.sin(player.angle + Math.PI) * e.speed * dt;
+            e.angle = Math.atan2(player.y - e.y, player.x - e.x);
+        } else {
+            e.angle = Math.atan2(player.y - e.y, player.x - e.x);
+        }
+
+        // AI Strzelanie
+        if (distToPlayer < 400 && now - e.lastShot > e.fireRate) {
+            // Sprawdź linie wzroku (uproszczone - czy nie ma skrzyni)
+            // Strzał
+            bullets.push({
+                x: e.x,
+                y: e.y,
+                angle: e.angle + (Math.random() - 0.5) * 0.2, // Rozrzut
+                speed: 400,
+                life: 2,
+                isEnemy: true,
+                damage: 10 + Math.random() * 5
+            });
+            e.lastShot = now;
+        }
+    }
+
+    // Aktualizacja cząsteczek
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx * dt;
+        p.y += p.vy * dt;
+        p.life -= dt;
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
+
+function draw() {
+    // Tło
+    ctx.clearRect(0, 0, game.width, game.height);
+
+    // Rysowanie skrzyń
+    ctx.fillStyle = '#c2a778';
+    ctx.strokeStyle = '#5e4623';
+    ctx.lineWidth = 2;
+    for (let obs of obstacles) {
+        ctx.fillRect(obs.x, obs.y, obs.w, obs.h);
+        ctx.strokeRect(obs.x, obs.y, obs.w, obs.h);
+        
+        // X na skrzyni (dekoracja)
+        ctx.beginPath();
+        ctx.moveTo(obs.x, obs.y);
+        ctx.lineTo(obs.x + obs.w, obs.y + obs.h);
+        ctx.moveTo(obs.x + obs.w, obs.y);
+        ctx.lineTo(obs.x, obs.y + obs.h);
+        ctx.stroke();
+    }
+
+    // Rysowanie wrogów
+    for (let e of enemies) {
+        ctx.save();
+        ctx.translate(e.x, e.y);
+        ctx.rotate(e.angle);
+        
+        // Ciało (Bandana Terrorysty)
+        ctx.fillStyle = e.color;
+        ctx.beginPath();
+        ctx.arc(0, 0, e.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#333';
+        ctx.stroke();
+
+        // Broń (AK-47 wizualizacja)
+        ctx.fillStyle = '#222';
+        ctx.fillRect(5, -5, 20, 10);
+        
+        // Głowa
+        ctx.fillStyle = '#dcb486'; // Skóra
+        ctx.beginPath();
+        ctx.arc(0, 0, 10, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Czerwona chustka
+        ctx.fillStyle = '#b00';
+        ctx.fillRect(-10, -12, 20, 6);
+
+        ctx.restore();
+        
+        // Pasek życia wroga
+        ctx.fillStyle = 'red';
+        ctx.fillRect(e.x - 15, e.y - 25, 30 * (e.hp / e.maxHp), 4);
+    }
+
+    // Rysowanie gracza
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(player.angle);
+
+    // Ciało CT
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, player.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // Kask
+    ctx.fillStyle = '#3e4e6e';
+    ctx.beginPath();
+    ctx.arc(0, 0, 12, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    // M4A1-S (Broń)
+    ctx.fillStyle = '#111';
+    ctx.fillRect(5, -6, 22, 12); // Lufa
+    ctx.fillStyle = '#444';
+    ctx.fillRect(5, 8, 15, 10); // Magazynek
+    ctx.fillStyle = '#222';
+    ctx.fillRect(-5, -8, 15, 16); // Kolba
+
+    ctx.restore();
+
+    // Rysowanie pocisków
+    ctx.fillStyle = '#ffeba7';
+    for (let b of bullets) {
+        ctx.beginPath();
+        ctx.arc(b.x, b.y, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    // Rysowanie cząsteczek
+    for (let p of particles) {
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+function loop(timestamp) {
+    if (!game.lastTime) game.lastTime = timestamp;
+    const dt = (timestamp - game.lastTime) / 1000;
+    game.lastTime = timestamp;
+
+    if (game.isPlaying) {
+        update(dt);
+        draw();
+        updateTimerUI();
+    }
+
+    requestAnimationFrame(loop);
+}
+
+// --- Funkcje Pomocnicze ---
+
+function shoot() {
+    player.lastShot = game.lastTime / 1000;
+    player.ammo--;
+    
+    AudioSys.playShoot();
+    
+    // Rozrzut
+    const spread = (Math.random() - 0.5) * 0.1; 
+    
+    bullets.push({
+        x: player.x + Math.cos(player.angle) * 20,
+        y: player.y + Math.sin(player.angle) * 20,
+        angle: player.angle + spread,
+        speed: 800,
+        life: 1.5,
+        isEnemy: false,
+        damage: 25
+    });
+    
+    updateHUD();
+}
+
+function reload() {
+    if (player.reloading || player.ammo === player.maxAmmo) return;
+    player.reloading = true;
+    player.reloadStart = game.lastTime / 1000;
+    AudioSys.playReload();
+    
+    // Wizualny wskaźnik przeładowania
+    ui.ammo.innerText = "...";
+}
+
+function takeDamage(amount) {
+    player.hp -= amount;
+    updateHUD();
+    ui.container.classList.add('damage-effect');
+    setTimeout(() => ui.container.classList.remove('damage-effect'), 200);
+
+    if (player.hp <= 0) {
+        endGame(false);
+    }
+}
+
+function createParticles(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * 200,
+            vy: (Math.random() - 0.5) * 200,
+            life: 0.5 + Math.random() * 0.5,
+            color: color,
+            size: Math.random() * 3
+        });
+    }
+}
+
+function updateHUD() {
+    ui.score.innerText = game.score;
+    ui.healthText.innerText = Math.ceil(player.hp);
+    ui.healthBar.style.width = Math.max(0, player.hp) + '%';
+    
+    if (player.hp < 30) ui.healthBar.style.background = 'red';
+    else ui.healthBar.style.background = 'var(--cs-blue)';
+
+    if (!player.reloading) {
+        ui.ammo.innerText = player.ammo;
+    }
+}
+
+function updateTimerUI() {
+    const m = Math.floor(game.timeLeft / 60).toString().padStart(2, '0');
+    const s = Math.floor(game.timeLeft % 60).toString().padStart(2, '0');
+    ui.timer.innerText = `${m}:${s}`;
+}
+
+function startGame() {
+    AudioSys.init();
+    AudioSys.startMusic();
+    
+    ui.start.classList.add('hidden');
+    ui.gameOver.classList.add('hidden');
+    
+    game.score = 0;
+    game.enemyScore = 0;
+    game.timeLeft = 120;
+    game.isPlaying = true;
+    
+    initMap();
+    updateHUD();
+    spawnEnemy();
+    
+    game.lastTime = performance.now();
+}
+
+function endGame(win) {
+    game.isPlaying = false;
+    AudioSys.stopMusic();
+    
+    ui.endTitle.innerText = win ? "Wygrana Rundy!" : "Zginąłeś!";
+    ui.endTitle.style.color = win ? "var(--cs-yellow)" : "var(--cs-red)";
+    ui.finalScore.innerText = game.score;
+    
+    ui.gameOver.classList.remove('hidden');
+}
+
+// --- Obsługa Wejścia ---
+
+// Klawiatura
+window.addEventListener('keydown', (e) => {
+    input.keys[e.key.toLowerCase()] = true;
+    if (e.key.toLowerCase() === 'r') reload();
+});
+window.addEventListener('keyup', (e) => input.keys[e.key.toLowerCase()] = false);
+
+// Mysz
+window.addEventListener('mousemove', (e) => {
+    input.mouse.x = e.clientX;
+    input.mouse.y = e.clientY;
+});
+window.addEventListener('mousedown', () => input.mouse.down = true);
+window.addEventListener('mouseup', () => input.mouse.down = false);
+
+// Dotyk (Joystick) - Logika
+const joystick = document.getElementById('joystick');
+const knob = document.getElementById('joystick-knob');
+const fireBtn = document.getElementById('fire-btn');
+const reloadBtn = document.getElementById('reload-btn');
+
+joystick.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    input.joystick.active = true;
+    updateJoystick(e.touches[0]);
+}, {passive: false});
+
+joystick.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    updateJoystick(e.touches[0]);
+}, {passive: false});
+
+joystick.addEventListener('touchend', (e) => {
+    e.preventDefault();
+    input.joystick.active = false;
+    input.joystick.x = 0;
+    input.joystick.y = 0;
+    input.joystick.force = 0;
+    knob.style.transform = `translate(-50%, -50%)`;
+});
+
+function updateJoystick(touch) {
+    const rect = joystick.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    let dx = touch.clientX - centerX;
+    let dy = touch.clientY - centerY;
+    
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    const maxDist = rect.width / 2;
+    
+    input.joystick.force = Math.min(dist, maxDist) / maxDist;
+    const angle = Math.atan2(dy, dx);
+    
+    input.joystick.angle = angle;
+    input.joystick.x = Math.cos(angle) * input.joystick.force;
+    input.joystick.y = Math.sin(angle) * input.joystick.force;
+    
+    // Ograniczenie wizualne gałki
+    const visualX = Math.cos(angle) * Math.min(dist, maxDist);
+    const visualY = Math.sin(angle) * Math.min(dist, maxDist);
+    
+    knob.style.transform = `translate(calc(-50% + ${visualX}px), calc(-50% + ${visualY}px))`;
+}
+
+// Przyciski mobilne
+fireBtn.addEventListener('touchstart', (e) => { e.preventDefault(); input.mobileFire = true; });
+fireBtn.addEventListener('touchend', (e) => { e.preventDefault(); input.mobileFire = false; });
+reloadBtn.addEventListener('touchstart', (e) => { e.preventDefault(); reload(); });
+
+// UI Przyciski
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// Start pętli
+requestAnimationFrame(loop);
+
+</script>
+</body>
+</html>
